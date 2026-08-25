@@ -1,0 +1,3 @@
+{"id": "tokyo_live_weather", "query": "What is the current weather in Tokyo?", "expected_tools": ["get_live_weather_api"]}
+{"id": "beijing_historical_undercalling", "query": "What was the PM2.5 and temperature for Beijing in your historical database?", "expected_tools": ["search_air_quality_db"]}
+{"id": "london_comparison_multi_tool", "query": "Compare live weather in London to the historical air quality record you have for London.", "expected_tools": ["get_live_weather_api", "search_air_quality_db"]}
