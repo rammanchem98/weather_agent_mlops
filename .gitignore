@@ -1,0 +1,5 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+src/data/local_qdrant_storage/
