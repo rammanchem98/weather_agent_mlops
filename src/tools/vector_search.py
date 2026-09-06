@@ -19,11 +19,19 @@ qdrant_client = QdrantClient(path=STORAGE_PATH)
 
 
 def search_air_quality_db(query: str) -> str:
-    """Searches the local vector database for real-time air quality metrics,
-       temperature, humidity, and PM2.5 values of various world cities.
+    """Searches a local historical database for STORED, PAST air quality and
+       weather records (temperature, humidity, PM2.5) for world cities. Use this
+       whenever the user asks about historical, past, prior-year, or stored data —
+       NOT for current/live/real-time conditions (use get_live_weather_api for that).
+
+       Always attempt this search for any historical-sounding question, even if
+       you are unsure whether data exists for the specific city asked about — the
+       search will simply return no results if the city isn't in the database,
+       which is more informative to the user than declining without checking.
 
        Args:
-        query: The natural language search query
+        query: The natural language search query describing what historical
+               data is being requested (e.g. "historical air quality in Beijing")
 
     """
 
