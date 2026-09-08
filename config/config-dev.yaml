@@ -11,4 +11,5 @@ bigquery:
 vector_store:
   collection_name: "air_quality_records"
   storage_path: "src/data/local_qdrant_storage"
+  url: "http://localhost:6333"
   embedding_model: "gemini-embedding-001"

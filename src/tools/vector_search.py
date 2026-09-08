@@ -15,8 +15,7 @@ STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"])
 COLLECTION_NAME = config["vector_store"]["collection_name"]
 
 client = genai.Client()
-qdrant_client = QdrantClient(path=STORAGE_PATH)
-
+qdrant_client = QdrantClient(url=config["vector_store"]["url"])
 
 def search_air_quality_db(query: str) -> str:
     """Searches a local historical database for STORED, PAST air quality and

@@ -17,7 +17,7 @@ COLLECTION_NAME = config["vector_store"]["collection_name"]
 STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"])
 EMBEDDING_MODEL = config["vector_store"]["embedding_model"]
 
-qdrant_client = QdrantClient(path=STORAGE_PATH)
+qdrant_client = QdrantClient(url=config["vector_store"]["url"])
 genai_client = genai.Client()
 
 

@@ -4,8 +4,10 @@ from google.genai import types
 from google.genai.types import AutomaticFunctionCallingConfig
 
 from src.agent.state import AgentState
+from src.mcp_servers.mcp_client_helper import call_tools_via_mcp_sync
 from src.tools.weather_api import get_live_weather_api
 from src.tools.vector_search import search_air_quality_db
+
 
 genai_client = genai.Client()
 
@@ -49,26 +51,18 @@ def agent_brain(state: AgentState) -> dict:
     return {"messages": [candidate]}
 
 def execute_tools_node(state: AgentState) -> dict:
-    """Action Node: Intercepts function_calls, runs them locally, and builds responses."""
+    """Action Node: Intercepts function_calls, runs them via MCP, and builds responses."""
     last_message = state["messages"][-1]
     tool_responses = []
     function_calls = get_function_calls(last_message)
 
     if function_calls:
+        calls = [(call.name, call.args or {}) for call in function_calls]
+        results = call_tools_via_mcp_sync(calls)  # ONE call, handles all tools in this turn
+
         for call in function_calls:
             tool_name = call.name
-            tool_args = call.args or {}
-
-            # Execute tool locally
-            if tool_name in TOOL_REGISTRY:
-                try:
-                    tool_output = TOOL_REGISTRY[tool_name](**tool_args)
-                except Exception as e:
-                    tool_output = f"Tool execution failed: {e}"
-            else:
-                tool_output = f"Tool '{tool_name}' not recognized."
-
-            # Package as FunctionResponse
+            tool_output = results.get(tool_name, f"Tool '{tool_name}' not recognized.")
             tool_responses.append(
                 types.Part.from_function_response(
                     name=tool_name,
