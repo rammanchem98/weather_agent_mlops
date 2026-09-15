@@ -1,0 +1,9 @@
+$kind: http-request
+name: http://localhost:8000/chat
+description: ""
+url: http://localhost:8000/chat
+method: POST
+body:
+  type: json
+  content: '{"message": "what is the weather in London ?"}'
+order: 1788903486725
