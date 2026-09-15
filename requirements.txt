@@ -2,6 +2,11 @@
 google-genai>=0.2.0
 google-cloud-bigquery>=3.10.0
 
+# API layer
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+
 # Orchestration
 langgraph>=0.2.0
 typing-extensions>=4.5.0
@@ -16,3 +21,6 @@ requests>=2.31.0
 pandas>=2.0.0
 db_dtypes
 pyarrow
+
+# MCP
+mcp<2

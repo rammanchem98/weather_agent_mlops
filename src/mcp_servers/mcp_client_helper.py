@@ -1,4 +1,4 @@
-# src/mcp_servers/mcp_client_helper.py
+import os
 import asyncio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -6,6 +6,8 @@ from mcp.client.stdio import stdio_client
 MCP_SERVER_PARAMS = StdioServerParameters(
     command="python",
     args=["-m", "src.mcp_servers.tools_server"],
+    env=os.environ.copy()   # <-- explicitly pass the parent's full environment from agent to MCP server, so it can see the API key 
+                            #     and other env vars
 )
 
 # Gemini-facing tool name -> actual MCP server tool name

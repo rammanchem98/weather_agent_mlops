@@ -13,6 +13,7 @@ config = get_config()
 EMBEDDING_MODEL = config["vector_store"]["embedding_model"]
 STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"])
 COLLECTION_NAME = config["vector_store"]["collection_name"]
+QDRANT_URL = os.getenv("QDRANT_URL", config["vector_store"]["url"])
 
 client = genai.Client()
 qdrant_client = QdrantClient(url=config["vector_store"]["url"])
