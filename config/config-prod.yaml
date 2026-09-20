@@ -1,0 +1,15 @@
+gcp:
+  project_id: "project-f0ff9de1-dfa0-4dca-957"
+  region: "europe-west2"
+
+bigquery:
+  dataset_id: "world_weather_dataset"
+  table_id: "world_air_quality"
+  columns: "city, temp, humidity, wind_speed, pm25_value"
+  row_limit: 100
+
+vector_store:
+  url: "http://10.154.0.4:6333"
+  #url: "http://localhost:6333"
+  collection_name: "air_quality_records"
+  embedding_model: "gemini-embedding-001"

@@ -11,7 +11,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 config = get_config()
 
 EMBEDDING_MODEL = config["vector_store"]["embedding_model"]
-STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"])
+#STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"]) for lcal storage, but not used in this code snippet
+
 COLLECTION_NAME = config["vector_store"]["collection_name"]
 QDRANT_URL = os.getenv("QDRANT_URL", config["vector_store"]["url"])
 

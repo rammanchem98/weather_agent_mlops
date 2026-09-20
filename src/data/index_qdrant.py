@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 config = get_config()
 
 COLLECTION_NAME = config["vector_store"]["collection_name"]
-STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"])
+#STORAGE_PATH = os.path.join(ROOT_DIR, config["vector_store"]["storage_path"]) for local storage, it writes qdrant data to local and prevent it from cloud storage
 EMBEDDING_MODEL = config["vector_store"]["embedding_model"]
 
 qdrant_client = QdrantClient(url=config["vector_store"]["url"])
