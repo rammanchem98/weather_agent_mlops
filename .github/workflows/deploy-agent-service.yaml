@@ -1,8 +1,7 @@
 name: Deploy Agent to Cloud Run
-
 on:
   push:
-    branches: [main]
+    branches: [main,feature/eval-harnes]
     paths:
       - 'src/**'
       - 'server.py'
