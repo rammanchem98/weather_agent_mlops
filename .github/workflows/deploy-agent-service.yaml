@@ -1,12 +1,13 @@
 name: Deploy Agent to Cloud Run
 on:
   push:
-    branches: [main,feature/eval-harness]
+    branches: [main, feature/eval-harness]
     paths:
       - 'src/**'
       - 'server.py'
       - 'requirements.txt'
       - 'deploy/docker/Dockerfile.agent'
+  workflow_dispatch:
 
 env:
   PROJECT_ID: project-f0ff9de1-dfa0-4dca-957
