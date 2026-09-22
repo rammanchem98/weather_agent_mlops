@@ -1,0 +1,64 @@
+name: Deploy Agent to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'server.py'
+      - 'requirements.txt'
+      - 'deploy/docker/Dockerfile.agent'
+
+env:
+  PROJECT_ID: project-f0ff9de1-dfa0-4dca-957
+  REGION: europe-west2
+  SERVICE: weather-agent
+  REPO: weather-agent-repo
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest tests/ -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/434869001624/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-deployer@project-f0ff9de1-dfa0-4dca-957.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west2-docker.pkg.dev
+
+      - name: Build and push image
+        run: |
+          docker build -t europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }} -f deploy/docker/Dockerfile.agent .
+          docker push europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image=europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --vpc-connector=qdrant-connector \
+            --set-secrets="^@^OPENWEATHER_API_KEY=openweather-api-key:latest@GEMINI_API_KEY=gemini-api-key:latest" \
+            --set-env-vars="^@^env=prod@QDRANT_URL=http://10.154.0.4:6333" \
+            --allow-unauthenticated
