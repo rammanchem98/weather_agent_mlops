@@ -1,7 +1,7 @@
 name: Deploy Agent to Cloud Run
 on:
   push:
-    branches: [main, feature/eval-harness]
+    branches: [main]
     paths:
       - 'src/**'
       - 'server.py'
