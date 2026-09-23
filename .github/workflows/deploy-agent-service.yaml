@@ -58,6 +58,10 @@ jobs:
           docker build -t europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }} -f deploy/docker/Dockerfile.agent .
           docker push europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }}
 
+      - name: Get Qdrant VM internal IP
+        id: qdrant_ip
+        run: echo "ip=$(gcloud compute addresses describe qdrant-internal-ip --region=europe-west2 --format='value(address)')" >> $GITHUB_OUTPUT
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
@@ -65,5 +69,5 @@ jobs:
             --region=${{ env.REGION }} \
             --vpc-connector=qdrant-connector \
             --set-secrets="^@^OPENWEATHER_API_KEY=openweather-api-key:latest@GEMINI_API_KEY=gemini-api-key:latest" \
-            --set-env-vars="^@^env=prod@QDRANT_URL=http://10.154.0.4:6333" \
+            --set-env-vars="^@^env=prod@QDRANT_URL=http://${{ steps.qdrant_ip.outputs.ip }}:6333" \
             --allow-unauthenticated

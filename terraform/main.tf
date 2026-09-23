@@ -49,6 +49,13 @@ resource "google_compute_firewall" "allow_qdrant_internal" {
   source_ranges = ["10.0.0.0/8"]
 }
 
+resource "google_compute_address" "qdrant_internal_ip" {
+  name         = "qdrant-internal-ip"
+  address_type = "INTERNAL"
+  region       = "europe-west2"
+  subnetwork   = "default"   # matches the network the VM already uses
+}
+
 resource "google_compute_instance" "qdrant_vm" {
   name         = "qdrant-vm"
   zone         = "europe-west2-b"
@@ -66,6 +73,7 @@ resource "google_compute_instance" "qdrant_vm" {
 
   network_interface {
     network = "default"
+    network_ip=google_compute_address.qdrant_internal_ip.address
   }
 
   metadata_startup_script = replace(<<-EOT
@@ -92,5 +100,6 @@ resource "google_vpc_access_connector" "qdrant_connector" {
 }
 
 output "qdrant_vm_internal_ip" {
-  value = google_compute_instance.qdrant_vm.network_interface[0].network_ip
+  description = "Internal IP address of the Qdrant VM"
+  value = google_compute_address.qdrant_internal_ip.address
 }

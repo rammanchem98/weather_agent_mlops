@@ -9,7 +9,7 @@ bigquery:
   row_limit: 100
 
 vector_store:
-  url: "http://10.154.0.4:6333"
+  url: "http://10.154.0.5:6333"
   #url: "http://localhost:6333"
   collection_name: "air_quality_records"
   embedding_model: "gemini-embedding-001"
