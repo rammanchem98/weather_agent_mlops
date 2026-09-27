@@ -1,0 +1,166 @@
+{
+  "components": {
+    "comp-index-qdrant-op": {
+      "executorLabel": "exec-index-qdrant-op",
+      "inputDefinitions": {
+        "parameters": {
+          "env": {
+            "parameterType": "STRING"
+          },
+          "gemini_secret_id": {
+            "parameterType": "STRING"
+          },
+          "project_id": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    },
+    "comp-ingest-live-weather-op": {
+      "executorLabel": "exec-ingest-live-weather-op",
+      "inputDefinitions": {
+        "parameters": {
+          "env": {
+            "parameterType": "STRING"
+          },
+          "openweather_secret_id": {
+            "parameterType": "STRING"
+          },
+          "project_id": {
+            "parameterType": "STRING"
+          }
+        }
+      }
+    }
+  },
+  "deploymentSpec": {
+    "executors": {
+      "exec-index-qdrant-op": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "index_qdrant_op"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-secret-manager'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef index_qdrant_op(env: str, gemini_secret_id: str, project_id: str):\n    import os\n    from google.cloud import secretmanager\n\n    client = secretmanager.SecretManagerServiceClient()\n    name = f\"projects/{project_id}/secrets/{gemini_secret_id}/versions/latest\"\n    api_key = client.access_secret_version(request={\"name\": name}).payload.data.decode(\"UTF-8\")\n\n    os.environ[\"env\"] = env\n    os.environ[\"GEMINI_API_KEY\"] = api_key\n    from src.data.index_qdrant import run_ingestion\n    run_ingestion()\n\n"
+          ],
+          "image": "europe-west2-docker.pkg.dev/project-f0ff9de1-dfa0-4dca-957/weather-agent-repo/pipeline-image:latest"
+        }
+      },
+      "exec-ingest-live-weather-op": {
+        "container": {
+          "args": [
+            "--executor_input",
+            "{{$}}",
+            "--function_to_execute",
+            "ingest_live_weather_op"
+          ],
+          "command": [
+            "sh",
+            "-c",
+            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'google-cloud-secret-manager'  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.17.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\n",
+            "sh",
+            "-ec",
+            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef ingest_live_weather_op(env: str, openweather_secret_id: str, project_id: str):\n    import os\n    from google.cloud import secretmanager\n\n    client = secretmanager.SecretManagerServiceClient()\n    name = f\"projects/{project_id}/secrets/{openweather_secret_id}/versions/latest\"\n    api_key = client.access_secret_version(request={\"name\": name}).payload.data.decode(\"UTF-8\")\n\n    os.environ[\"env\"] = env\n    os.environ[\"OPENWEATHER_API_KEY\"] = api_key\n    from src.data.ingest_live_weather import fetch_and_ingest_data\n    fetch_and_ingest_data()\n\n"
+          ],
+          "image": "europe-west2-docker.pkg.dev/project-f0ff9de1-dfa0-4dca-957/weather-agent-repo/pipeline-image:latest"
+        }
+      }
+    }
+  },
+  "pipelineInfo": {
+    "name": "weather-ingestion-pipeline"
+  },
+  "root": {
+    "dag": {
+      "tasks": {
+        "index-qdrant-op": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-index-qdrant-op"
+          },
+          "dependentTasks": [
+            "ingest-live-weather-op"
+          ],
+          "inputs": {
+            "parameters": {
+              "env": {
+                "componentInputParameter": "env"
+              },
+              "gemini_secret_id": {
+                "componentInputParameter": "gemini_secret_id"
+              },
+              "project_id": {
+                "componentInputParameter": "project_id"
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "index-qdrant-op"
+          }
+        },
+        "ingest-live-weather-op": {
+          "cachingOptions": {
+            "enableCache": true
+          },
+          "componentRef": {
+            "name": "comp-ingest-live-weather-op"
+          },
+          "inputs": {
+            "parameters": {
+              "env": {
+                "componentInputParameter": "env"
+              },
+              "openweather_secret_id": {
+                "componentInputParameter": "openweather_secret_id"
+              },
+              "project_id": {
+                "componentInputParameter": "project_id"
+              }
+            }
+          },
+          "taskInfo": {
+            "name": "ingest-live-weather-op"
+          }
+        }
+      }
+    },
+    "inputDefinitions": {
+      "parameters": {
+        "env": {
+          "defaultValue": "prod",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "gemini_secret_id": {
+          "defaultValue": "gemini-api-key",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "openweather_secret_id": {
+          "defaultValue": "openweather-api-key",
+          "isOptional": true,
+          "parameterType": "STRING"
+        },
+        "project_id": {
+          "defaultValue": "project-f0ff9de1-dfa0-4dca-957",
+          "isOptional": true,
+          "parameterType": "STRING"
+        }
+      }
+    }
+  },
+  "schemaVersion": "2.1.0",
+  "sdkVersion": "kfp-2.17.0"
+}

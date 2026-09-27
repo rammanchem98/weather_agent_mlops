@@ -1,1 +1,4 @@
 pytest>=8.0.0
+kfp
+google-cloud-aiplatform
+google-cloud-secret-manager

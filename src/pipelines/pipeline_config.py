@@ -1,0 +1,6 @@
+PROJECT_ID = "project-f0ff9de1-dfa0-4dca-957"
+PROJECT_NUMBER = "434869001624"
+REGION = "europe-west2"
+NETWORK = f"projects/{PROJECT_NUMBER}/global/networks/default"
+SERVICE_ACCOUNT = f"vertex-pipeline-sa@{PROJECT_ID}.iam.gserviceaccount.com"
+STAGING_BUCKET = f"gs://{PROJECT_ID}-pipeline-staging"
