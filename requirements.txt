@@ -23,4 +23,5 @@ db_dtypes
 pyarrow
 
 # MCP
-mcp<2 nprometheus_client
+mcp<2 
+prometheus_client

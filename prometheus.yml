@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'weather-agent'
+    scheme: https
+    static_configs:
+      - targets: ['weather-agent-434869001624.europe-west2.run.app']
