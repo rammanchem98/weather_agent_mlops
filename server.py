@@ -1,21 +1,30 @@
-# server.py
-import uuid
-import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 from google.genai import types
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+import uuid
+import logging
+import time
 
 from src.agent.graph import compiled_agent
 from src.api.guardrails import check_input, check_output
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+REQUEST_COUNT = Counter("agent_requests_total", "Total chat requests", ["status"])
+REQUEST_LATENCY = Histogram("agent_request_duration_seconds", "Request latency")
+
 app = FastAPI(title="Weather Agent API")
+
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 class ChatRequest(BaseModel):
     message: str
-    thread_id: str | None = None  # optional — lets a client continue a conversation
+    thread_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -25,8 +34,12 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
+    start_time = time.time()  # renamed from "start" to avoid any confusion with the tracemalloc import
+
     is_safe, rejection_reason = await check_input(request.message)
     if not is_safe:
+        REQUEST_COUNT.labels(status="rejected").inc()
+        REQUEST_LATENCY.observe(time.time() - start_time)
         raise HTTPException(status_code=400, detail=rejection_reason)
 
     thread_id = request.thread_id or str(uuid.uuid4())
@@ -37,12 +50,16 @@ async def chat(request: ChatRequest) -> ChatResponse:
         result = await compiled_agent.ainvoke({"messages": [user_message]}, config=config)
     except Exception as e:
         logging.exception("Agent invocation failed")
+        REQUEST_COUNT.labels(status="error").inc()
+        REQUEST_LATENCY.observe(time.time() - start_time)
         raise HTTPException(status_code=500, detail=f"Agent error: {e}")
 
     last = result["messages"][-1]
     final_text = "".join(part.text for part in (last.parts or []) if part.text)
     safe_text = check_output(final_text)
 
+    REQUEST_COUNT.labels(status="success").inc()
+    REQUEST_LATENCY.observe(time.time() - start_time)
     return ChatResponse(response=safe_text, thread_id=thread_id)
 
 
