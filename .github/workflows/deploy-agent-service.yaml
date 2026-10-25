@@ -6,7 +6,9 @@ on:
       - 'src/**'
       - 'server.py'
       - 'requirements.txt'
+      - 'frontend/**'
       - 'deploy/docker/Dockerfile.agent'
+      - '.dockerignore'
       - '.github/workflows/deploy-agent-service.yaml'
   workflow_dispatch:
 
@@ -29,8 +31,23 @@ jobs:
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python -m pytest tests/ -v
 
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
   deploy:
-    needs: test
+    needs: [test, frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,6 +85,7 @@ jobs:
             --image=europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --vpc-connector=qdrant-connector \
+            --max-instances=2 \
             --set-secrets="^@^OPENWEATHER_API_KEY=openweather-api-key:latest@GEMINI_API_KEY=gemini-api-key:latest" \
             --set-env-vars="^@^env=prod@QDRANT_URL=http://${{ steps.qdrant_ip.outputs.ip }}:6333" \
             --allow-unauthenticated

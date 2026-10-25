@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 from google.genai import types
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -8,6 +8,8 @@ import time
 
 from src.agent.graph import compiled_agent
 from src.api.guardrails import check_input, check_output
+from src.api.rate_limit import chat_rate_limiter, client_ip
+from src.api.static import mount_frontend
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -33,8 +35,13 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     start_time = time.time()  # renamed from "start" to avoid any confusion with the tracemalloc import
+
+    # Checked before the guardrails so rejected spam doesn't cost a classifier call
+    if not chat_rate_limiter.allow(client_ip(http_request)):
+        REQUEST_COUNT.labels(status="rate_limited").inc()
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a minute and try again.")
 
     is_safe, rejection_reason = await check_input(request.message)
     if not is_safe:
@@ -66,3 +73,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# Must stay last: the front end is mounted at "/", which would shadow any route added after it
+mount_frontend(app)

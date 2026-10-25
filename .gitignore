@@ -6,3 +6,7 @@ src/data/local_qdrant_storage/
 qdrant_storage/
 .terraform/
 *.tfstate*
+
+# Front end
+node_modules/
+frontend/dist/
