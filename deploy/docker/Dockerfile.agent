@@ -1,3 +1,17 @@
+# Stage 1: build the React front end. Only frontend/dist is carried into the
+# final image, so Node and node_modules never ship to Cloud Run.
+FROM node:22-slim AS frontend-build
+
+WORKDIR /frontend
+
+# Copy the lockfile first so the npm ci layer is cached until dependencies change
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: the Python API, which also serves the built front end at "/"
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -8,6 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY server.py .
 COPY config/ ./config/
+COPY --from=frontend-build /frontend/dist ./frontend/dist
 
 ENV PORT=8080
 EXPOSE 8080

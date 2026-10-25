@@ -38,7 +38,8 @@ Client → server.py (FastAPI) → guardrails → LangGraph agent → tools (wea
 │   ├── data/                 # Ingestion: fetch raw data, index into Qdrant
 │   ├── tools/                 # Agent tools: weather API, vector search
 │   ├── agent/                 # LangGraph state, nodes, graph
-│   └── api/                   # HTTP layer, guardrails
+│   └── api/                   # HTTP layer: guardrails, rate limit, static front end
+├── frontend/                 # React + TypeScript chat page (Vite)
 ├── eval/                     # Golden queries, eval runner, LLM-as-judge
 ├── tests/                    # Unit tests (no live LLM calls)
 ├── deploy/                   # Dockerfiles + Cloud Build config
@@ -63,7 +64,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python main.py
 
 # run the API server locally
-python server.py
+uvicorn server:app --reload --port 8000
 
 # run unit tests
 make test
@@ -72,11 +73,60 @@ make test
 make eval
 ```
 
+## Front end
+
+A small React + TypeScript chat page lives in `frontend/` (built with Vite, no UI library).
+It talks only to `POST /chat`, keeps the returned `thread_id` so follow-up questions share
+the agent's memory, and shows friendly messages for guardrail rejections (400), rate
+limiting (429) and errors (500 / network), never the server's raw error text.
+
+### Run it locally
+
+```bash
+# terminal 1: the API on :8000
+uvicorn server:app --reload --port 8000
+
+# terminal 2: the Vite dev server on :5173 (proxies /chat and /health to :8000)
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://localhost:5173. Front end tests: `make frontend-test` (or `cd frontend && npm test`).
+
+### How it is built and served
+
+- `npm run build` type-checks and writes static files to `frontend/dist/`.
+- `server.py` mounts `frontend/dist` at `/` (`src/api/static.py`) after all API routes,
+  so `/chat`, `/health`, `/metrics` and `/docs` keep working. Without a build, the API runs alone.
+- `deploy/docker/Dockerfile.agent` is multi-stage: a Node stage builds the front end and the
+  Python image copies in only `dist/`. Page and API share one origin and one Cloud Run
+  service, so no CORS is needed.
+- Cost protection: `/chat` is rate limited per client IP (10 messages/minute, in memory,
+  `src/api/rate_limit.py`) before the guardrails run, and Cloud Run is capped at 2 instances.
+
+```mermaid
+flowchart LR
+    B[Browser<br/>React page] -->|GET /| S[FastAPI<br/>server.py]
+    S -->|static files| B
+    B -->|POST /chat| S
+    S --> R{Rate limit}
+    R -->|over limit| E429[429]
+    R --> G{Input guardrails}
+    G -->|rejected| E400[400]
+    G --> A[LangGraph agent]
+    A --> T[Tools: weather API,<br/>Qdrant search]
+    A --> O[Output guardrail]
+    O -->|response + thread_id| B
+```
+
 ## Deployment
 
-- `deploy-ingestion-job.yaml` builds and deploys the ingestion pipeline as a Cloud Run Job on changes under `src/data/`.
-- `deploy-agent-service.yaml` builds and deploys the agent API as a Cloud Run Service on changes under `src/agent/`, `src/api/`, `src/tools/`.
-- `ci-test.yaml` runs lint, unit tests, and eval on every pull request.
+- `deploy-agent-service.yaml` tests (backend + front end), builds and deploys the agent API and
+  front end as a Cloud Run Service on pushes to `main` that touch `src/`, `server.py`,
+  `requirements.txt`, `frontend/`, the agent Dockerfile or `.dockerignore`.
+- `ci-test.yaml` runs the backend unit tests and the front end tests and build on every pull request.
+- The ingestion pipeline is submitted as a Vertex AI Pipeline (`src/pipelines/`).
 
 ## Current focus
 
