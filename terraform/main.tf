@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "google" {
-  project = "project-f0ff9de1-dfa0-4dca-957"
+  project = var.project_id
   region  = "europe-west2"
 }
 
@@ -27,20 +27,20 @@ resource "google_compute_router_nat" "nat_config" {
 }
 
 resource "google_compute_firewall" "allow_iap_ssh" {
-  name    = "allow-iap-ssh"
-  network = "default"
+  name      = "allow-iap-ssh"
+  network   = "default"
   direction = "INGRESS"
   allow {
     protocol = "tcp"
     #ports    = ["22" , "6333"]
-    ports    = ["22"]
+    ports = ["22"]
   }
   source_ranges = ["35.235.240.0/20"]
 }
 
 resource "google_compute_firewall" "allow_qdrant_internal" {
-  name    = "allow-qdrant-internal"
-  network = "default"
+  name      = "allow-qdrant-internal"
+  network   = "default"
   direction = "INGRESS"
   allow {
     protocol = "tcp"
@@ -53,7 +53,8 @@ resource "google_compute_address" "qdrant_internal_ip" {
   name         = "qdrant-internal-ip"
   address_type = "INTERNAL"
   region       = "europe-west2"
-  subnetwork   = "default"   # matches the network the VM already uses
+  subnetwork   = "default"    # matches the network the VM already uses
+  address      = "10.154.0.5" # pinned: config-prod.yaml points here (inside default europe-west2 subnet 10.154.0.0/20)
 }
 
 resource "google_compute_instance" "qdrant_vm" {
@@ -72,8 +73,8 @@ resource "google_compute_instance" "qdrant_vm" {
   }
 
   network_interface {
-    network = "default"
-    network_ip=google_compute_address.qdrant_internal_ip.address
+    network    = "default"
+    network_ip = google_compute_address.qdrant_internal_ip.address
   }
 
   metadata_startup_script = replace(<<-EOT
@@ -101,5 +102,5 @@ resource "google_vpc_access_connector" "qdrant_connector" {
 
 output "qdrant_vm_internal_ip" {
   description = "Internal IP address of the Qdrant VM"
-  value = google_compute_address.qdrant_internal_ip.address
+  value       = google_compute_address.qdrant_internal_ip.address
 }
