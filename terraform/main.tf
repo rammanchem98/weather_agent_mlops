@@ -79,9 +79,12 @@ resource "google_compute_instance" "qdrant_vm" {
 
   metadata_startup_script = replace(<<-EOT
     #!/bin/bash
-    curl -fsSL https://get.docker.com | sh
+    if ! command -v docker >/dev/null 2>&1; then
+      curl -fsSL https://get.docker.com | sh
+    fi
     mkdir -p /mnt/qdrant_data
-    docker run -d -p 6333:6333 -v /mnt/qdrant_data:/qdrant/storage qdrant/qdrant
+    docker rm -f qdrant >/dev/null 2>&1 || true
+    docker run -d --name qdrant --restart unless-stopped -p 6333:6333 -v /mnt/qdrant_data:/qdrant/storage qdrant/qdrant:v1.20.2
     EOT
   , "\r\n", "\n")
 }
