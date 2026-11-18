@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: project-f0ff9de1-dfa0-4dca-957
+  PROJECT_ID: project-85377ad2-eae6-4b4b-b13
   REGION: europe-west2
   SERVICE: weather-agent
   REPO: weather-agent-repo
@@ -60,8 +60,8 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: 'projects/434869001624/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-          service_account: 'github-actions-deployer@project-f0ff9de1-dfa0-4dca-957.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/167732558110/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-deployer@project-85377ad2-eae6-4b4b-b13.iam.gserviceaccount.com'
           token_format: 'access_token'
        
       - name: Set up Cloud SDK
@@ -77,7 +77,7 @@ jobs:
 
       - name: Get Qdrant VM internal IP
         id: qdrant_ip
-        run: echo "ip=$(gcloud compute addresses describe qdrant-internal-ip --region=europe-west2 --format='value(address)')" >> $GITHUB_OUTPUT
+        run: echo "ip=$(gcloud compute addresses describe qdrant-internal-ip --region=europe-west2 --project=${{ env.PROJECT_ID }} --format='value(address)')" >> $GITHUB_OUTPUT
 
       - name: Deploy to Cloud Run
         run: |
@@ -85,6 +85,7 @@ jobs:
             --image=europe-west2-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --vpc-connector=qdrant-connector \
+            --min-instances=0 \
             --max-instances=2 \
             --set-secrets="^@^OPENWEATHER_API_KEY=openweather-api-key:latest@GEMINI_API_KEY=gemini-api-key:latest" \
             --set-env-vars="^@^env=prod@QDRANT_URL=http://${{ steps.qdrant_ip.outputs.ip }}:6333" \
