@@ -6,6 +6,8 @@ import json
 import logging
 from google import genai
 
+from src.common.redact import redact_secrets
+
 logger = logging.getLogger(__name__)
 
 genai_client = genai.Client()
@@ -96,6 +98,7 @@ async def check_input(message: str) -> tuple[bool, str | None]:
 def check_output(response_text: str) -> str:
     if not response_text:
         return response_text
+    response_text = redact_secrets(response_text)  # actual key values and appid= params
     if re.search(r"AIza[0-9A-Za-z_\-]{20,}", response_text):
         return "I can't share that information — let me know if you'd like to rephrase your question."
     if re.search(r"[A-Za-z]:\\[\w\\]+|/src/|/home/", response_text):

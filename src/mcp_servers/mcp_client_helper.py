@@ -5,6 +5,8 @@ import logging
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from src.common.redact import redact_secrets
+
 MCP_SERVER_PARAMS = StdioServerParameters(
     command="python",
     args=["-m", "src.mcp_servers.tools_server"],
@@ -51,7 +53,8 @@ async def _run_calls(session, calls: list[tuple[str, dict]], results: list[dict]
                 text = f"MCP tool call failed: {e}"
         results.append({
             "name": agent_tool_name,
-            "result": text,
+            # Tool error text can carry request URLs with API keys in them.
+            "result": redact_secrets(text),
             "duration_s": time.perf_counter() - started,
         })
     return results
