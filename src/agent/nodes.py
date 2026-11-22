@@ -60,14 +60,22 @@ def execute_tools_node(state: AgentState) -> dict:
         calls = [(call.name, call.args or {}) for call in function_calls]
         results = call_tools_via_mcp_sync(calls)  # ONE call, handles all tools in this turn
 
-        for call in function_calls:
-            tool_name = call.name
-            tool_output = results.get(tool_name, f"Tool '{tool_name}' not recognized.")
-            tool_responses.append(
-                types.Part.from_function_response(
-                    name=tool_name,
-                    response={"result": tool_output}
-                )
-            )
+        # Results come back in the same order as the calls, so match by position.
+        # (Matching by tool name made two calls to the same tool share one result.)
+        for i, call in enumerate(function_calls):
+            if i < len(results):
+                tool_output = results[i]["result"]
+            else:
+                tool_output = f"Tool '{call.name}' returned no result."
+            tool_responses.append(_function_response_part(call, {"result": tool_output}))
 
     return {"messages": [types.Content(role="user", parts=tool_responses)]}
+
+
+def _function_response_part(call: types.FunctionCall, response: dict) -> types.Part:
+    """Builds the function_response for one call. The Gemini API often leaves
+    call.id empty; when it is set, echo it back so the response is tied to its call."""
+    return types.Part(function_response=types.FunctionResponse(
+        id=call.id or None, name=call.name, response=response,
+    ))
+
