@@ -18,6 +18,8 @@ REQUEST_LATENCY = Histogram("agent_request_duration_seconds", "Request latency")
 
 app = FastAPI(title="Weather Agent API")
 
+AGENT_ERROR_MESSAGE = "The agent couldn't complete this request. Please try again."
+
 
 @app.get("/metrics")
 async def metrics():
@@ -55,11 +57,13 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
 
     try:
         result = await compiled_agent.ainvoke({"messages": [user_message]}, config=config)
-    except Exception as e:
+    except Exception:
+        # Full exception (type, message, traceback) goes to the server log only;
+        # the client gets a generic message so internals never leak.
         logging.exception("Agent invocation failed")
         REQUEST_COUNT.labels(status="error").inc()
         REQUEST_LATENCY.observe(time.time() - start_time)
-        raise HTTPException(status_code=500, detail=f"Agent error: {e}")
+        raise HTTPException(status_code=500, detail=AGENT_ERROR_MESSAGE)
 
     last = result["messages"][-1]
     final_text = "".join(part.text for part in (last.parts or []) if part.text)
