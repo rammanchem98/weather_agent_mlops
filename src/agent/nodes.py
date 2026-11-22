@@ -1,3 +1,4 @@
+import json
 import logging
 from google import genai
 from google.genai import types
@@ -79,3 +80,64 @@ def _function_response_part(call: types.FunctionCall, response: dict) -> types.P
         id=call.id or None, name=call.name, response=response,
     ))
 
+
+# --- Tool-loop protection ---------------------------------------------------
+
+MAX_TOOL_ROUNDS = 3
+
+TOOL_LIMIT_MESSAGE = (
+    "Sorry, I couldn't finish answering that. I kept needing more tool calls "
+    "without getting to an answer, so I stopped. Try asking about one city at a time."
+)
+
+
+def current_turn_tool_batches(messages) -> list[list[tuple[str, str]]]:
+    """Tool-call batches the model has made since the user's latest question,
+    oldest first. Each batch is a list of (tool name, args as sorted JSON).
+
+    The checkpointer keeps the whole thread, so this walks back only to the most
+    recent user message that contains text (tool results are also role="user",
+    but carry function_response parts, not text)."""
+    batches = []
+    for message in reversed(messages):
+        parts = message.parts or []
+        if message.role == "user" and any(part.text for part in parts):
+            break
+        calls = get_function_calls(message)
+        if calls:
+            batches.append([
+                (call.name, json.dumps(call.args or {}, sort_keys=True)) for call in calls
+            ])
+    batches.reverse()
+    return batches
+
+
+def should_stop_tool_loop(messages) -> bool:
+    """True if the latest tool-call batch would exceed MAX_TOOL_ROUNDS for this
+    turn, or exactly repeats the batch just before it (the model is stuck)."""
+    batches = current_turn_tool_batches(messages)
+    if len(batches) > MAX_TOOL_ROUNDS:
+        return True
+    return len(batches) >= 2 and batches[-1] == batches[-2]
+
+
+def tool_limit_node(state: AgentState) -> dict:
+    """Ends the turn with a short, honest message instead of running more tools.
+
+    The pending function calls still get (not-executed) responses first: the
+    thread history is replayed to Gemini on the next question, and a function
+    call with no response after it would make that request invalid."""
+    last_message = state["messages"][-1]
+    calls = get_function_calls(last_message)
+    logging.warning(
+        f"Tool loop stopped after {len(current_turn_tool_batches(state['messages']))} "
+        f"batches; pending calls: {[(c.name, c.args) for c in calls]}"
+    )
+    not_run = [
+        _function_response_part(call, {"result": "Not executed: tool-call limit reached."})
+        for call in calls
+    ]
+    return {"messages": [
+        types.Content(role="user", parts=not_run),
+        types.Content(role="model", parts=[types.Part.from_text(text=TOOL_LIMIT_MESSAGE)]),
+    ]}
