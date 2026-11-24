@@ -65,28 +65,50 @@ async def _classify_injection(message: str) -> dict:
             raw_text = raw_text.split("```")[1]  # grab content between first pair of fences
             raw_text = raw_text.removeprefix("json").strip()  # drop the "json" language tag if present
 
-        return json.loads(raw_text)
+        classification = json.loads(raw_text)
+        if not isinstance(classification, dict):
+            raise ValueError("classifier returned non-object JSON")
+        return {**classification, "available": True}
     except Exception as e:
         logger.warning(f"Injection classifier unavailable, failing open: {e}")
-        return {"is_injection": False, "confidence": "low", "reason": "classifier unavailable"}
+        return {"is_injection": False, "confidence": "low", "reason": "classifier unavailable",
+                "available": False}
 
 
-async def check_input(message: str) -> tuple[bool, str | None]:
+async def check_input(message: str, verdict: dict | None = None) -> tuple[bool, str | None]:
+    """Returns (is_safe, rejection_reason). If `verdict` is given it is filled with
+    what each layer decided, for the UI trace:
+      regex:      "pass" | "fail"
+      classifier: "passed" | "flagged" | "unavailable"  (absent if it didn't run)
+      classifier_calls: number of classifier Gemini calls attempted (0 or 1)
+    "unavailable" means the classifier failed (e.g. a 429) and the message was let
+    through on the regex check alone; it is never reported as "passed"."""
+    if verdict is None:
+        verdict = {}
+    verdict.setdefault("classifier_calls", 0)
+
     if not message or not message.strip():
         return False, "Message cannot be empty."
     if len(message) > MAX_MESSAGE_LENGTH:
         return False, f"Message exceeds maximum length of {MAX_MESSAGE_LENGTH} characters."
 
     pattern_safe, pattern_reason = _pattern_check(message)
+    verdict["regex"] = "pass" if pattern_safe else "fail"
     if not pattern_safe:
         return False, pattern_reason  # cheap reject, skip the LLM call entirely
 
+    verdict["classifier_calls"] += 1  # counted as attempted even if it fails
     classification = await _classify_injection(message)
-    logger.debug(f"DEBUG - classifier result: {classification}") 
-    if classification["is_injection"] and classification["confidence"] in ("medium", "high"):
-        logger.info(f"Classifier flagged injection attempt: {classification['reason']}")
+    logger.debug(f"DEBUG - classifier result: {classification}")
+    if not classification.get("available", True):
+        verdict["classifier"] = "unavailable"
+        return True, None
+    if classification.get("is_injection") and classification.get("confidence") in ("medium", "high"):
+        verdict["classifier"] = "flagged"
+        logger.info(f"Classifier flagged injection attempt: {classification.get('reason')}")
         return False, "Message flagged as a potential prompt injection attempt."
 
+    verdict["classifier"] = "passed"
     return True, None
 
 
