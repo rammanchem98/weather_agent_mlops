@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from google.genai import types
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -52,6 +53,16 @@ def guardrail_summary(verdict: dict) -> dict:
     return {layer: verdict[layer] for layer in ("regex", "classifier") if layer in verdict}
 
 
+def blocking_layer(verdict: dict) -> str:
+    """Which layer rejected the message: only its name, never the matched pattern
+    or the classifier's reason. Empty/too-long messages never reach the regex."""
+    if verdict.get("regex") == "fail":
+        return "regex"
+    if verdict.get("classifier") == "flagged":
+        return "classifier"
+    return "validation"
+
+
 @app.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     start_time = time.time()  # renamed from "start" to avoid any confusion with the tracemalloc import
@@ -69,7 +80,11 @@ async def chat(request: ChatRequest, http_request: Request) -> ChatResponse:
     if not is_safe:
         REQUEST_COUNT.labels(status="rejected").inc()
         REQUEST_LATENCY.observe(time.time() - start_time)
-        raise HTTPException(status_code=400, detail=rejection_reason)
+        # Same `detail` as before, plus a trace naming only the blocking layer.
+        return JSONResponse(status_code=400, content={
+            "detail": rejection_reason,
+            "trace": {"guardrail": {blocking_layer(verdict): "blocked"}},
+        })
 
     thread_id = request.thread_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": thread_id, TRACE_CONFIG_KEY: recorder}}

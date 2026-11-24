@@ -32,6 +32,8 @@ export default function App({ footer }: { footer?: ReactNode } = {}) {
   const [status, setStatus] = useState<Status>("idle");
   // The message to resend if the user clicks Retry after an error.
   const [failedText, setFailedText] = useState<string | null>(null);
+  // True when the server's 400 trace says a guardrail layer blocked the message.
+  const [blockedByGuardrail, setBlockedByGuardrail] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   const loading = status === "loading";
@@ -58,6 +60,7 @@ export default function App({ footer }: { footer?: ReactNode } = {}) {
         break;
       case "blocked":
         setInput(text); // give the text back so it can be rephrased
+        setBlockedByGuardrail(result.byGuardrail ?? false);
         setStatus("blocked");
         break;
       case "rate_limited":
@@ -154,6 +157,9 @@ export default function App({ footer }: { footer?: ReactNode } = {}) {
         {(status === "blocked" || status === "rate_limited" || status === "error") && (
           <div className={`notice notice-${status}`} role="alert">
             <span>{NOTICES[status]}</span>
+            {status === "blocked" && blockedByGuardrail && (
+              <span className="badge badge-blocked">Blocked by guardrail</span>
+            )}
             {status === "error" && failedText !== null && (
               <button type="button" className="button-secondary" onClick={() => request(failedText)}>
                 Retry
