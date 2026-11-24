@@ -1,4 +1,27 @@
+import { useState } from "react";
 import type { Trace } from "./api";
+
+const PLAN_PREVIEW_CHARS = 300;
+
+// Rendered as a React text node: no markdown or HTML is interpreted, so
+// "**bold**" or "<b>" show up literally.
+function ReasoningSummary({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = text.length > PLAN_PREVIEW_CHARS;
+  const shown = long && !expanded ? `${text.slice(0, PLAN_PREVIEW_CHARS).trimEnd()}…` : text;
+
+  return (
+    <div className="trace-section">
+      <h3>Reasoning summary</h3>
+      <p className="trace-plan">{shown}</p>
+      {long && (
+        <button type="button" className="trace-toggle" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function formatArgs(args: Record<string, unknown>): string {
   return Object.entries(args)
@@ -42,12 +65,7 @@ export default function TraceView({ trace }: { trace: Trace }) {
       <div className="trace-body">
         <GuardrailBadge guardrail={trace.guardrail} />
 
-        {trace.plan && (
-          <div className="trace-section">
-            <h3>Reasoning summary</h3>
-            <p className="trace-plan">{trace.plan}</p>
-          </div>
-        )}
+        {trace.plan && <ReasoningSummary text={trace.plan} />}
 
         <div className="trace-section">
           <h3>Tool calls</h3>

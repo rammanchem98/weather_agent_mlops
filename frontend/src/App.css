@@ -315,3 +315,15 @@ button:disabled {
   font-size: 0.8125rem;
   text-align: center;
 }
+
+.trace-toggle {
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--sky-700);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-decoration: underline;
+}

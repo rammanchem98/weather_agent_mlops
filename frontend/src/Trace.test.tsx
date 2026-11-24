@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import EvalFooter from "./EvalFooter";
+import TraceView from "./TraceView";
 import { parseTrace } from "./api";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -88,6 +89,46 @@ describe("How I got this answer", () => {
     expect(parseTrace(null)).toBeUndefined();
     expect(parseTrace("trace")).toBeUndefined();
     expect(parseTrace([1])).toBeUndefined();
+  });
+});
+
+describe("Reasoning summary", () => {
+  const markup = "**bold** <b>tag</b> <img src=x onerror=alert(1)> ";
+  const longPlan = markup + "y".repeat(500) + " END";
+
+  it("is plain text, collapsed to ~300 chars, with a Show more / Show less toggle", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<TraceView trace={{ guardrail: {}, toolCalls: [], plan: longPlan }} />);
+
+    expect(screen.getByText("Reasoning summary")).toBeInTheDocument();
+    const paragraph = container.querySelector(".trace-plan")!;
+    expect(paragraph.textContent!.startsWith(markup)).toBe(true);        // markup shown literally
+    expect(paragraph.textContent!.endsWith("…")).toBe(true);
+    expect(paragraph.textContent!.length).toBeLessThanOrEqual(301);
+    expect(paragraph.textContent).not.toContain("END");
+    expect(container.querySelector(".trace-plan b, .trace-plan strong, .trace-plan img")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Show more" }));
+    expect(paragraph.textContent).toBe(longPlan);
+    expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(screen.getByRole("button", { name: "Show less" }));
+    expect(paragraph.textContent).not.toContain("END");
+  });
+
+  it("shows a short summary in full with no toggle", () => {
+    render(<TraceView trace={{ guardrail: {}, toolCalls: [], plan: "A short plan." }} />);
+    expect(screen.getByText("A short plan.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show/ })).not.toBeInTheDocument();
+  });
+
+  it("renders tool args and previews as literal text too", () => {
+    const { container } = render(<TraceView trace={{
+      guardrail: {}, toolCalls: [{ name: "t", args: { q: "<b>x</b>" }, resultPreview: "<i>y</i> **z**" }],
+    }} />);
+    expect(screen.getByText('t(q="<b>x</b>")')).toBeInTheDocument();
+    expect(screen.getByText("<i>y</i> **z**")).toBeInTheDocument();
+    expect(container.querySelector(".trace-tools b, .trace-tools i")).toBeNull();
   });
 });
 
