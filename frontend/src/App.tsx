@@ -22,6 +22,14 @@ const NOTICES: Record<"blocked" | "rate_limited" | "error", string> = {
   error: "Something went wrong. Please try again.",
 };
 
+// Only the regex or classifier layers are "guardrail" blocks; empty or too-long
+// input is a plain validation rejection. Unknown layers get no badge.
+const BLOCKED_BADGES: Record<string, string> = {
+  regex: "Blocked by guardrail",
+  classifier: "Blocked by guardrail",
+  validation: "Input rejected",
+};
+
 let nextId = 0;
 
 // `footer` is rendered below the composer (main.tsx passes the eval footer).
@@ -32,8 +40,8 @@ export default function App({ footer }: { footer?: ReactNode } = {}) {
   const [status, setStatus] = useState<Status>("idle");
   // The message to resend if the user clicks Retry after an error.
   const [failedText, setFailedText] = useState<string | null>(null);
-  // True when the server's 400 trace says a guardrail layer blocked the message.
-  const [blockedByGuardrail, setBlockedByGuardrail] = useState(false);
+  // Badge for a 400, from the layer named in the server's trace (if any).
+  const [blockedBadge, setBlockedBadge] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
   const loading = status === "loading";
@@ -60,7 +68,7 @@ export default function App({ footer }: { footer?: ReactNode } = {}) {
         break;
       case "blocked":
         setInput(text); // give the text back so it can be rephrased
-        setBlockedByGuardrail(result.byGuardrail ?? false);
+        setBlockedBadge(BLOCKED_BADGES[result.blockedBy ?? ""] ?? null);
         setStatus("blocked");
         break;
       case "rate_limited":
@@ -157,9 +165,7 @@ export default function App({ footer }: { footer?: ReactNode } = {}) {
         {(status === "blocked" || status === "rate_limited" || status === "error") && (
           <div className={`notice notice-${status}`} role="alert">
             <span>{NOTICES[status]}</span>
-            {status === "blocked" && blockedByGuardrail && (
-              <span className="badge badge-blocked">Blocked by guardrail</span>
-            )}
+            {status === "blocked" && blockedBadge && <span className="badge badge-blocked">{blockedBadge}</span>}
             {status === "error" && failedText !== null && (
               <button type="button" className="button-secondary" onClick={() => request(failedText)}>
                 Retry

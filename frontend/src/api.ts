@@ -9,7 +9,7 @@ export const MAX_MESSAGE_LENGTH = 2000;
 
 export type ChatResult =
   | { kind: "ok"; response: string; threadId: string; trace?: Trace }
-  | { kind: "blocked"; byGuardrail?: boolean } // 400: guardrail or validation rejection
+  | { kind: "blocked"; blockedBy?: string } // 400: guardrail or validation rejection; layer name only
   | { kind: "rate_limited" } // 429: too many messages from this client
   | { kind: "error" }; // 500, any other status, bad JSON, or network failure
 
@@ -122,14 +122,14 @@ export async function sendMessage(
 
   if (res.status === 400) {
     // The server may add trace.guardrail naming the blocking layer; detail is never shown.
-    let byGuardrail = false;
+    let blockedBy: string | undefined;
     try {
       const trace = parseTrace(((await res.json()) as { trace?: unknown })?.trace);
-      byGuardrail = Object.values(trace?.guardrail ?? {}).includes("blocked");
+      blockedBy = Object.entries(trace?.guardrail ?? {}).find(([, status]) => status === "blocked")?.[0];
     } catch {
       // no or invalid body: still a plain "blocked"
     }
-    return { kind: "blocked", byGuardrail };
+    return { kind: "blocked", blockedBy };
   }
   if (res.status === 429) return { kind: "rate_limited" };
   if (!res.ok) return { kind: "error" };
