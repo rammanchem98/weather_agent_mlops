@@ -14,6 +14,7 @@ from typing import Any, Callable
 # checkpoint metadata, so the recorder object is never serialized by MemorySaver.
 TRACE_CONFIG_KEY = "__trace_recorder"
 RESULT_PREVIEW_CHARS = 300
+PLAN_MAX_CHARS = 2000  # sanity cap; the UI shows ~300 chars with "Show more"
 
 
 @dataclass
@@ -75,5 +76,8 @@ def build_trace(recorder: TraceRecorder, total_latency_s: float, sanitize: Calla
         "total_latency_s": round(total_latency_s, 3),
     }
     if recorder.thoughts:
-        trace["plan"] = sanitize("\n\n".join(recorder.thoughts))
+        plan = sanitize("\n\n".join(recorder.thoughts))  # sanitize first, then cut
+        if len(plan) > PLAN_MAX_CHARS:
+            plan = plan[:PLAN_MAX_CHARS - 1].rstrip() + "…"
+        trace["plan"] = plan
     return trace

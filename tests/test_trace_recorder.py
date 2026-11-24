@@ -8,7 +8,7 @@ from google.genai import errors, types
 
 import src.agent.nodes as nodes
 from src.agent.graph import compiled_agent
-from src.agent.trace import RESULT_PREVIEW_CHARS, TRACE_CONFIG_KEY, TraceRecorder, build_trace
+from src.agent.trace import PLAN_MAX_CHARS, RESULT_PREVIEW_CHARS, TRACE_CONFIG_KEY, TraceRecorder, build_trace
 
 
 def gemini(*parts):
@@ -183,3 +183,16 @@ def test_build_trace_sanitizes_truncates_and_omits_empty_plan():
 
     recorder.add_thought("SECRET plan")
     assert build_trace(recorder, 0, sanitize=lambda s: s.replace("SECRET", "[REDACTED]"))["plan"] == "[REDACTED] plan"
+
+
+def test_plan_is_capped_at_2000_chars_with_an_ellipsis_after_sanitizing():
+    recorder = TraceRecorder()
+    recorder.add_thought("SECRET " + "x" * 5000)
+    plan = build_trace(recorder, 0, sanitize=lambda s: s.replace("SECRET", "[REDACTED]"))["plan"]
+
+    assert len(plan) <= PLAN_MAX_CHARS and plan.endswith("…")
+    assert plan.startswith("[REDACTED] ")
+
+    short = TraceRecorder()
+    short.add_thought("A short plan.")
+    assert build_trace(short, 0, sanitize=str)["plan"] == "A short plan."
