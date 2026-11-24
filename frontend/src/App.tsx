@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { MAX_MESSAGE_LENGTH, sendMessage } from "./api";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { MAX_MESSAGE_LENGTH, sendMessage, type Trace } from "./api";
+import TraceView from "./TraceView";
 
 interface Message {
   id: number;
   role: "user" | "assistant";
   text: string;
+  trace?: Trace;
 }
 
 type Status = "idle" | "loading" | "blocked" | "rate_limited" | "error";
@@ -22,7 +24,8 @@ const NOTICES: Record<"blocked" | "rate_limited" | "error", string> = {
 
 let nextId = 0;
 
-export default function App() {
+// `footer` is rendered below the composer (main.tsx passes the eval footer).
+export default function App({ footer }: { footer?: ReactNode } = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -47,7 +50,10 @@ export default function App() {
     switch (result.kind) {
       case "ok":
         setThreadId(result.threadId);
-        setMessages((prev) => [...prev, { id: nextId++, role: "assistant", text: result.response }]);
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId++, role: "assistant", text: result.response, trace: result.trace },
+        ]);
         setStatus("idle");
         break;
       case "blocked":
@@ -128,11 +134,14 @@ export default function App() {
         )}
 
         {messages.map((message) => (
-          <div key={message.id} className={`message message-${message.role}`}>
-            <span className="visually-hidden">
-              {message.role === "user" ? "You said:" : "Agent replied:"}
-            </span>
-            {message.text}
+          <div key={message.id} className={`turn turn-${message.role}`}>
+            <div className={`message message-${message.role}`}>
+              <span className="visually-hidden">
+                {message.role === "user" ? "You said:" : "Agent replied:"}
+              </span>
+              {message.text}
+            </div>
+            {message.role === "assistant" && message.trace && <TraceView trace={message.trace} />}
           </div>
         ))}
 
@@ -177,6 +186,7 @@ export default function App() {
           </button>
         </div>
       </form>
+      {footer}
     </div>
   );
 }

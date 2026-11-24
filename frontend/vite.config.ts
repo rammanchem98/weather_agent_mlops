@@ -14,6 +14,7 @@ export default defineConfig({
     proxy: {
       "/chat": API_TARGET,
       "/health": API_TARGET,
+      "/eval": API_TARGET,
     },
   },
   test: {
