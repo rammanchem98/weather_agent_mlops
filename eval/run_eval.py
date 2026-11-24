@@ -55,7 +55,7 @@ def get_tool_results_and_answer(result: dict) -> tuple[list[str], str]:
     final_answer = ""
     last = result["messages"][-1]
     for part in (last.parts or []):
-        if part.text:
+        if part.text and not part.thought:  # thought summaries are not the answer
             final_answer = part.text
     return tool_results, final_answer
 

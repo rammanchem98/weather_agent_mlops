@@ -1,10 +1,12 @@
 import json
 import logging
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 from google.genai.types import AutomaticFunctionCallingConfig
+from langchain_core.runnables import RunnableConfig
 
 from src.agent.state import AgentState
+from src.agent.trace import get_recorder
 from src.mcp_servers.mcp_client_helper import call_tools_via_mcp_sync
 from src.tools.weather_api import get_live_weather_api
 from src.tools.vector_search import search_air_quality_db
@@ -28,30 +30,69 @@ def get_function_calls(content: types.Content):
         return []
     return [part.function_call for part in content.parts if part.function_call is not None]
 
-def agent_brain(state: AgentState) -> dict:
-    """Reasoning Node: Passes conversation state to Gemini 2.5 Flash."""
-    config = types.GenerateContentConfig(
-        tools=AVAILABLE_TOOLS,
-        temperature=0.0,
-        automatic_function_calling=AutomaticFunctionCallingConfig(disable=True)
-    )
+def is_thought(part: types.Part) -> bool:
+    """Thought-summary parts (returned because of include_thoughts) are for the
+    trace only: never part of the answer, the logs or the stored history."""
+    return bool(getattr(part, "thought", None))
 
-    response = genai_client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=state["messages"],
-        config=config
-    )
+
+# Set to False the first time the API rejects include_thoughts; later calls skip it.
+_include_thoughts = True
+
+
+def _generate(contents, recorder):
+    """One agent generateContent call. Every attempt is counted, failed ones too.
+    If the API rejects include_thoughts, retry once without it (no summary)."""
+    global _include_thoughts
+    while True:
+        config = types.GenerateContentConfig(
+            tools=AVAILABLE_TOOLS,
+            temperature=0.0,
+            automatic_function_calling=AutomaticFunctionCallingConfig(disable=True),
+            thinking_config=types.ThinkingConfig(include_thoughts=True) if _include_thoughts else None,
+        )
+        if recorder:
+            recorder.count_gemini_call()
+        try:
+            return genai_client.models.generate_content(
+                model="gemini-2.5-flash", contents=contents, config=config,
+            )
+        except errors.ClientError as e:
+            message = str(e).lower()
+            if _include_thoughts and e.code == 400 and ("thought" in message or "thinking" in message):
+                logging.warning("include_thoughts rejected by the API; continuing without reasoning summaries")
+                _include_thoughts = False
+                continue
+            raise
+
+
+def agent_brain(state: AgentState, config: RunnableConfig | None = None) -> dict:
+    """Reasoning Node: Passes conversation state to Gemini 2.5 Flash."""
+    recorder = get_recorder(config)
+    response = _generate(state["messages"], recorder)
 
     candidate = response.candidates[0].content
+    parts = candidate.parts or []
+    if recorder:
+        for part in parts:
+            if is_thought(part) and part.text:
+                recorder.add_thought(part.text)
+
+    # Keep thought text out of the thread history (it is replayed to Gemini on the
+    # next question); function_call parts keep their thought_signature untouched.
+    visible = [part for part in parts if not is_thought(part)]
+    if visible and len(visible) != len(parts):
+        candidate = types.Content(role=candidate.role, parts=visible)
+
     function_calls= get_function_calls(candidate)
     if function_calls:
         logging.info(f"Function calls detected:{[(f.name,f.args) for f in function_calls]}")
     else:
-        text=",".join([part.text for part in candidate.parts if part.text])
+        text=",".join([part.text for part in (candidate.parts or []) if part.text and not is_thought(part)])
         logging.info(f"No function calls detected. Response: {text}")
     return {"messages": [candidate]}
 
-def execute_tools_node(state: AgentState) -> dict:
+def execute_tools_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Action Node: Intercepts function_calls, runs them via MCP, and builds responses."""
     last_message = state["messages"][-1]
     tool_responses = []
@@ -63,12 +104,21 @@ def execute_tools_node(state: AgentState) -> dict:
 
         # Results come back in the same order as the calls, so match by position.
         # (Matching by tool name made two calls to the same tool share one result.)
+        recorded = []
         for i, call in enumerate(function_calls):
             if i < len(results):
                 tool_output = results[i]["result"]
+                duration_s = results[i].get("duration_s", 0.0)
             else:
                 tool_output = f"Tool '{call.name}' returned no result."
+                duration_s = 0.0
             tool_responses.append(_function_response_part(call, {"result": tool_output}))
+            recorded.append({"name": call.name, "args": dict(call.args or {}),
+                             "result": tool_output, "duration_s": duration_s})
+
+        recorder = get_recorder(config)
+        if recorder:
+            recorder.add_tool_round(recorded)
 
     return {"messages": [types.Content(role="user", parts=tool_responses)]}
 
@@ -121,7 +171,7 @@ def should_stop_tool_loop(messages) -> bool:
     return len(batches) >= 2 and batches[-1] == batches[-2]
 
 
-def tool_limit_node(state: AgentState) -> dict:
+def tool_limit_node(state: AgentState, config: RunnableConfig | None = None) -> dict:
     """Ends the turn with a short, honest message instead of running more tools.
 
     The pending function calls still get (not-executed) responses first: the
@@ -133,6 +183,9 @@ def tool_limit_node(state: AgentState) -> dict:
         f"Tool loop stopped after {len(current_turn_tool_batches(state['messages']))} "
         f"batches; pending calls: {[(c.name, c.args) for c in calls]}"
     )
+    recorder = get_recorder(config)
+    if recorder:
+        recorder.capped = True
     not_run = [
         _function_response_part(call, {"result": "Not executed: tool-call limit reached."})
         for call in calls

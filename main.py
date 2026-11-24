@@ -36,7 +36,7 @@ def main():
             last_message = result["messages"][-1]
             if hasattr(last_message, "parts"):
                 for part in last_message.parts:
-                    if part.text:
+                    if part.text and not part.thought:  # thought summaries are not the answer
                         print(f"\n🤖 Assistant:\n{part.text}")
 
         except KeyboardInterrupt:
